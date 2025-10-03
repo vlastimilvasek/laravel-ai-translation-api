@@ -243,6 +243,46 @@ resources/views/
 - **Claude**: `claude-sonnet-4-5-20250929`
 - **ChatGPT**: `gpt-4o` (default), `gpt-4-turbo`, `gpt-3.5-turbo`
 
+## 🧪 Testování
+
+Projekt obsahuje kompletní sadu automatizovaných testů:
+
+- **51 testů** (90 assertions)
+- **Feature testy** - testují API endpointy
+- **Unit testy** - testují ClaudeApiService a ChatGptApiService
+- **HTTP Mocking** - testy neposílají reálné requesty na AI API
+
+### Spuštění testů:
+
+```bash
+# Spusť všechny testy
+php artisan test
+
+# Spusť pouze unit testy
+php artisan test --testsuite=Unit
+
+# Spusť pouze feature testy
+php artisan test --testsuite=Feature
+
+# Spusť konkrétní test soubor
+php artisan test tests/Feature/TranslationApiTest.php
+
+# Spusť s pokrytím kódu
+php artisan test --coverage
+```
+
+### Co je testováno:
+
+✅ Validace vstupních dat (povinná pole, max délka, formát jazykových kódů)
+✅ Úspěšné překlady přes Claude i ChatGPT API
+✅ Zpracování chyb API (401, 429, 500)
+✅ Zachování HTML struktury při překladu
+✅ Odstranění markdown code bloků z ChatGPT odpovědí
+✅ Výchozí hodnoty jazyků (cs → pl)
+✅ Změna modelů
+✅ Custom parametry (max_tokens, temperature, top_p)
+✅ Connection errors
+
 ## 🔒 Bezpečnost
 
 ⚠️ **Nikdy nezveřejňujte ani nesdílejte API klíče!**
