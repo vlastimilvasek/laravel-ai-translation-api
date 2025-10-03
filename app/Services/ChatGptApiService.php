@@ -10,6 +10,8 @@ class ChatGptApiService
     private string $apiKey;
     private string $model = 'gpt-4o';
     private string $apiUrl = 'https://api.openai.com/v1/chat/completions';
+    private string $filesApiUrl = 'https://api.openai.com/v1/files';
+    private string $batchApiUrl = 'https://api.openai.com/v1/batches';
 
     public function __construct()
     {
@@ -151,5 +153,265 @@ EOT;
     public function getModel(): string
     {
         return $this->model;
+    }
+
+    /**
+     * Vytvoří batch pro hromadné překlady pomocí OpenAI Batch API
+     *
+     * @param array $translations [{id: string, text: string, from: string, to: string}, ...]
+     * @param int $maxTokens Max tokens per translation
+     * @return array Batch response with batch_id and status
+     */
+    public function createBatchTranslation(array $translations, int $maxTokens = 4096): array
+    {
+        // Vytvoř JSONL obsah
+        $jsonlLines = [];
+        $languageNames = $this->getLanguageNames();
+
+        foreach ($translations as $translation) {
+            $customId = $translation['id'];
+            $text = $translation['text'];
+            $from = $translation['from'] ?? 'cs';
+            $to = $translation['to'] ?? 'pl';
+
+            $fromLang = $languageNames[$from] ?? $from;
+            $toLang = $languageNames[$to] ?? $to;
+            $prompt = $this->buildTranslationPrompt($text, $fromLang, $toLang);
+
+            $request = [
+                'custom_id' => $customId,
+                'method' => 'POST',
+                'url' => '/v1/chat/completions',
+                'body' => [
+                    'model' => $this->model,
+                    'messages' => [
+                        [
+                            'role' => 'user',
+                            'content' => $prompt,
+                        ],
+                    ],
+                    'max_tokens' => $maxTokens,
+                ],
+            ];
+
+            $jsonlLines[] = json_encode($request);
+        }
+
+        $jsonlContent = implode("\n", $jsonlLines);
+
+        // Upload JSONL soubor
+        $fileId = $this->uploadBatchFile($jsonlContent);
+
+        // Vytvoř batch job
+        return $this->createBatchJob($fileId);
+    }
+
+    /**
+     * Nahraje JSONL soubor pro batch processing
+     *
+     * @param string $jsonlContent JSONL content
+     * @return string File ID
+     */
+    private function uploadBatchFile(string $jsonlContent): string
+    {
+        try {
+            $response = Http::withHeaders([
+                'Authorization' => 'Bearer ' . $this->apiKey,
+            ])
+            ->timeout(60)
+            ->attach('file', $jsonlContent, 'batch_requests.jsonl')
+            ->post($this->filesApiUrl, [
+                'purpose' => 'batch',
+            ]);
+
+            if ($response->failed()) {
+                $errorData = $response->json();
+                $errorMessage = $errorData['error']['message'] ?? $response->body();
+                throw new \Exception('OpenAI Files API error: ' . $errorMessage);
+            }
+
+            $data = $response->json();
+            return $data['id'];
+
+        } catch (ConnectionException $e) {
+            throw new \Exception('Chyba připojení k OpenAI Files API: ' . $e->getMessage());
+        }
+    }
+
+    /**
+     * Vytvoří batch job
+     *
+     * @param string $fileId File ID from uploadBatchFile
+     * @return array Batch response
+     */
+    private function createBatchJob(string $fileId): array
+    {
+        try {
+            $response = Http::withHeaders([
+                'Authorization' => 'Bearer ' . $this->apiKey,
+                'Content-Type' => 'application/json',
+            ])
+            ->timeout(30)
+            ->post($this->batchApiUrl, [
+                'input_file_id' => $fileId,
+                'endpoint' => '/v1/chat/completions',
+                'completion_window' => '24h',
+            ]);
+
+            if ($response->failed()) {
+                $errorData = $response->json();
+                $errorMessage = $errorData['error']['message'] ?? $response->body();
+                throw new \Exception('OpenAI Batch API error: ' . $errorMessage);
+            }
+
+            return $response->json();
+
+        } catch (ConnectionException $e) {
+            throw new \Exception('Chyba připojení k OpenAI Batch API: ' . $e->getMessage());
+        }
+    }
+
+    /**
+     * Získá status batche
+     *
+     * @param string $batchId
+     * @return array Batch status
+     */
+    public function getBatchStatus(string $batchId): array
+    {
+        try {
+            $response = Http::withHeaders([
+                'Authorization' => 'Bearer ' . $this->apiKey,
+            ])
+            ->timeout(30)
+            ->get("{$this->batchApiUrl}/{$batchId}");
+
+            if ($response->failed()) {
+                $errorData = $response->json();
+                $errorMessage = $errorData['error']['message'] ?? $response->body();
+                throw new \Exception('OpenAI Batch API error: ' . $errorMessage);
+            }
+
+            return $response->json();
+
+        } catch (ConnectionException $e) {
+            throw new \Exception('Chyba připojení k OpenAI Batch API: ' . $e->getMessage());
+        }
+    }
+
+    /**
+     * Stáhne výsledky batche
+     *
+     * @param string $batchId
+     * @return array Results array with custom_id and result for each request
+     */
+    public function getBatchResults(string $batchId): array
+    {
+        // Nejdřív získej status, abychom zjistili output_file_id
+        $status = $this->getBatchStatus($batchId);
+
+        if (!isset($status['output_file_id'])) {
+            throw new \Exception('Batch ještě nemá výsledky nebo skončil s chybou');
+        }
+
+        $outputFileId = $status['output_file_id'];
+
+        // Stáhni soubor s výsledky
+        try {
+            $response = Http::withHeaders([
+                'Authorization' => 'Bearer ' . $this->apiKey,
+            ])
+            ->timeout(120)
+            ->get("{$this->filesApiUrl}/{$outputFileId}/content");
+
+            if ($response->failed()) {
+                $errorData = $response->json();
+                $errorMessage = $errorData['error']['message'] ?? $response->body();
+                throw new \Exception('OpenAI Files API error: ' . $errorMessage);
+            }
+
+            // Results are in JSONL format - parse line by line
+            $body = $response->body();
+            $lines = explode("\n", trim($body));
+            $results = [];
+
+            foreach ($lines as $line) {
+                if (!empty($line)) {
+                    $lineData = json_decode($line, true);
+
+                    // Zpracuj výsledek a vyčisti markdown
+                    if (isset($lineData['response']['body']['choices'][0]['message']['content'])) {
+                        $content = $lineData['response']['body']['choices'][0]['message']['content'];
+                        $lineData['response']['body']['choices'][0]['message']['content'] =
+                            $this->cleanMarkdownCodeBlocks($content);
+                    }
+
+                    $results[] = $lineData;
+                }
+            }
+
+            return $results;
+
+        } catch (ConnectionException $e) {
+            throw new \Exception('Chyba připojení k OpenAI Files API: ' . $e->getMessage());
+        }
+    }
+
+    /**
+     * Zruší běžící batch
+     *
+     * @param string $batchId
+     * @return array Cancellation response
+     */
+    public function cancelBatch(string $batchId): array
+    {
+        try {
+            $response = Http::withHeaders([
+                'Authorization' => 'Bearer ' . $this->apiKey,
+            ])
+            ->timeout(30)
+            ->post("{$this->batchApiUrl}/{$batchId}/cancel");
+
+            if ($response->failed()) {
+                $errorData = $response->json();
+                $errorMessage = $errorData['error']['message'] ?? $response->body();
+                throw new \Exception('OpenAI Batch API error: ' . $errorMessage);
+            }
+
+            return $response->json();
+
+        } catch (ConnectionException $e) {
+            throw new \Exception('Chyba připojení k OpenAI Batch API: ' . $e->getMessage());
+        }
+    }
+
+    /**
+     * Vypíše všechny batche
+     *
+     * @param int $limit Počet batchů k načtení (max 100)
+     * @return array List of batches
+     */
+    public function listBatches(int $limit = 20): array
+    {
+        try {
+            $response = Http::withHeaders([
+                'Authorization' => 'Bearer ' . $this->apiKey,
+            ])
+            ->timeout(30)
+            ->get($this->batchApiUrl, [
+                'limit' => min($limit, 100),
+            ]);
+
+            if ($response->failed()) {
+                $errorData = $response->json();
+                $errorMessage = $errorData['error']['message'] ?? $response->body();
+                throw new \Exception('OpenAI Batch API error: ' . $errorMessage);
+            }
+
+            return $response->json();
+
+        } catch (ConnectionException $e) {
+            throw new \Exception('Chyba připojení k OpenAI Batch API: ' . $e->getMessage());
+        }
     }
 }

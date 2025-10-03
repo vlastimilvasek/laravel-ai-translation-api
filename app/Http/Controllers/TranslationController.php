@@ -201,4 +201,246 @@ class TranslationController extends Controller
             ], 500);
         }
     }
+
+    /**
+     * Vytvoří batch pro hromadné překlady pomocí Claude
+     *
+     * @OA\Post(
+     *     path="/api/v1/batch/claude",
+     *     summary="Vytvoří batch job pro hromadné překlady pomocí Claude (50% sleva)",
+     *     tags={"Batch"},
+     *     security={{"bearerAuth":{}}},
+     *     @OA\RequestBody(
+     *         required=true,
+     *         @OA\JsonContent(
+     *             required={"translations"},
+     *             @OA\Property(
+     *                 property="translations",
+     *                 type="array",
+     *                 @OA\Items(
+     *                     type="object",
+     *                     required={"id","text"},
+     *                     @OA\Property(property="id", type="string", example="article-123"),
+     *                     @OA\Property(property="text", type="string", example="<p>Text k překladu</p>"),
+     *                     @OA\Property(property="from", type="string", example="cs"),
+     *                     @OA\Property(property="to", type="string", example="pl")
+     *                 )
+     *             )
+     *         )
+     *     ),
+     *     @OA\Response(response=200, description="Batch úspěšně vytvořen")
+     * )
+     */
+    public function createClaudeBatch(Request $request)
+    {
+        $validator = Validator::make($request->all(), [
+            'translations' => 'required|array|min:1|max:100000',
+            'translations.*.id' => 'required|string',
+            'translations.*.text' => 'required|string|max:50000',
+            'translations.*.from' => 'nullable|string|size:2',
+            'translations.*.to' => 'nullable|string|size:2',
+        ]);
+
+        if ($validator->fails()) {
+            return response()->json([
+                'message' => 'Validační chyba',
+                'errors' => $validator->errors()
+            ], 422);
+        }
+
+        try {
+            $batch = $this->claudeApi->createBatchTranslation($request->input('translations'));
+            return response()->json($batch);
+        } catch (\Exception $e) {
+            return response()->json([
+                'message' => 'Chyba při vytváření batche: ' . $e->getMessage()
+            ], 500);
+        }
+    }
+
+    /**
+     * Vytvoří batch pro hromadné překlady pomocí ChatGPT
+     *
+     * @OA\Post(
+     *     path="/api/v1/batch/chatgpt",
+     *     summary="Vytvoří batch job pro hromadné překlady pomocí ChatGPT (50% sleva)",
+     *     tags={"Batch"},
+     *     security={{"bearerAuth":{}}},
+     *     @OA\RequestBody(
+     *         required=true,
+     *         @OA\JsonContent(
+     *             required={"translations"},
+     *             @OA\Property(
+     *                 property="translations",
+     *                 type="array",
+     *                 @OA\Items(
+     *                     type="object",
+     *                     required={"id","text"},
+     *                     @OA\Property(property="id", type="string", example="article-456"),
+     *                     @OA\Property(property="text", type="string", example="<p>Text to translate</p>"),
+     *                     @OA\Property(property="from", type="string", example="en"),
+     *                     @OA\Property(property="to", type="string", example="cs")
+     *                 )
+     *             )
+     *         )
+     *     ),
+     *     @OA\Response(response=200, description="Batch úspěšně vytvořen")
+     * )
+     */
+    public function createChatGptBatch(Request $request)
+    {
+        $validator = Validator::make($request->all(), [
+            'translations' => 'required|array|min:1|max:50000',
+            'translations.*.id' => 'required|string',
+            'translations.*.text' => 'required|string|max:50000',
+            'translations.*.from' => 'nullable|string|size:2',
+            'translations.*.to' => 'nullable|string|size:2',
+        ]);
+
+        if ($validator->fails()) {
+            return response()->json([
+                'message' => 'Validační chyba',
+                'errors' => $validator->errors()
+            ], 422);
+        }
+
+        try {
+            $batch = $this->chatGptApi->createBatchTranslation($request->input('translations'));
+            return response()->json($batch);
+        } catch (\Exception $e) {
+            return response()->json([
+                'message' => 'Chyba při vytváření batche: ' . $e->getMessage()
+            ], 500);
+        }
+    }
+
+    /**
+     * Získá status batche
+     *
+     * @OA\Get(
+     *     path="/api/v1/batch/{provider}/{batchId}/status",
+     *     summary="Získá status batch jobu",
+     *     tags={"Batch"},
+     *     security={{"bearerAuth":{}}},
+     *     @OA\Parameter(name="provider", in="path", required=true, @OA\Schema(type="string", enum={"claude","chatgpt"})),
+     *     @OA\Parameter(name="batchId", in="path", required=true, @OA\Schema(type="string")),
+     *     @OA\Response(response=200, description="Status batche")
+     * )
+     */
+    public function getBatchStatus(Request $request, string $provider, string $batchId)
+    {
+        try {
+            if ($provider === 'claude') {
+                $status = $this->claudeApi->getBatchStatus($batchId);
+            } elseif ($provider === 'chatgpt') {
+                $status = $this->chatGptApi->getBatchStatus($batchId);
+            } else {
+                return response()->json(['message' => 'Neplatný provider'], 400);
+            }
+
+            return response()->json($status);
+        } catch (\Exception $e) {
+            return response()->json([
+                'message' => 'Chyba při získávání statusu: ' . $e->getMessage()
+            ], 500);
+        }
+    }
+
+    /**
+     * Stáhne výsledky batche
+     *
+     * @OA\Get(
+     *     path="/api/v1/batch/{provider}/{batchId}/results",
+     *     summary="Stáhne výsledky batch jobu",
+     *     tags={"Batch"},
+     *     security={{"bearerAuth":{}}},
+     *     @OA\Parameter(name="provider", in="path", required=true, @OA\Schema(type="string", enum={"claude","chatgpt"})),
+     *     @OA\Parameter(name="batchId", in="path", required=true, @OA\Schema(type="string")),
+     *     @OA\Response(response=200, description="Výsledky batche")
+     * )
+     */
+    public function getBatchResults(Request $request, string $provider, string $batchId)
+    {
+        try {
+            if ($provider === 'claude') {
+                $results = $this->claudeApi->getBatchResults($batchId);
+            } elseif ($provider === 'chatgpt') {
+                $results = $this->chatGptApi->getBatchResults($batchId);
+            } else {
+                return response()->json(['message' => 'Neplatný provider'], 400);
+            }
+
+            return response()->json(['results' => $results]);
+        } catch (\Exception $e) {
+            return response()->json([
+                'message' => 'Chyba při stahování výsledků: ' . $e->getMessage()
+            ], 500);
+        }
+    }
+
+    /**
+     * Zruší batch job
+     *
+     * @OA\Post(
+     *     path="/api/v1/batch/{provider}/{batchId}/cancel",
+     *     summary="Zruší běžící batch job",
+     *     tags={"Batch"},
+     *     security={{"bearerAuth":{}}},
+     *     @OA\Parameter(name="provider", in="path", required=true, @OA\Schema(type="string", enum={"claude","chatgpt"})),
+     *     @OA\Parameter(name="batchId", in="path", required=true, @OA\Schema(type="string")),
+     *     @OA\Response(response=200, description="Batch zrušen")
+     * )
+     */
+    public function cancelBatch(Request $request, string $provider, string $batchId)
+    {
+        try {
+            if ($provider === 'claude') {
+                $result = $this->claudeApi->cancelBatch($batchId);
+            } elseif ($provider === 'chatgpt') {
+                $result = $this->chatGptApi->cancelBatch($batchId);
+            } else {
+                return response()->json(['message' => 'Neplatný provider'], 400);
+            }
+
+            return response()->json($result);
+        } catch (\Exception $e) {
+            return response()->json([
+                'message' => 'Chyba při rušení batche: ' . $e->getMessage()
+            ], 500);
+        }
+    }
+
+    /**
+     * Vypíše všechny batche
+     *
+     * @OA\Get(
+     *     path="/api/v1/batch/{provider}",
+     *     summary="Vypíše všechny batch joby",
+     *     tags={"Batch"},
+     *     security={{"bearerAuth":{}}},
+     *     @OA\Parameter(name="provider", in="path", required=true, @OA\Schema(type="string", enum={"claude","chatgpt"})),
+     *     @OA\Parameter(name="limit", in="query", @OA\Schema(type="integer", default=20)),
+     *     @OA\Response(response=200, description="Seznam batchů")
+     * )
+     */
+    public function listBatches(Request $request, string $provider)
+    {
+        $limit = $request->query('limit', 20);
+
+        try {
+            if ($provider === 'claude') {
+                $batches = $this->claudeApi->listBatches($limit);
+            } elseif ($provider === 'chatgpt') {
+                $batches = $this->chatGptApi->listBatches($limit);
+            } else {
+                return response()->json(['message' => 'Neplatný provider'], 400);
+            }
+
+            return response()->json($batches);
+        } catch (\Exception $e) {
+            return response()->json([
+                'message' => 'Chyba při získávání seznamu: ' . $e->getMessage()
+            ], 500);
+        }
+    }
 }

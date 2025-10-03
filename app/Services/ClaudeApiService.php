@@ -10,6 +10,7 @@ class ClaudeApiService
     private string $apiKey;
     private string $model = 'claude-sonnet-4-5-20250929';
     private string $apiUrl = 'https://api.anthropic.com/v1/messages';
+    private string $batchApiUrl = 'https://api.anthropic.com/v1/messages/batches';
     private string $apiVersion = '2023-06-01';
 
     public function __construct()
@@ -123,5 +124,195 @@ EOT;
     public function getModel(): string
     {
         return $this->model;
+    }
+
+    /**
+     * Vytvoří batch pro hromadné překlady
+     *
+     * @param array $translations [{id: string, text: string, from: string, to: string}, ...]
+     * @param int $maxTokens Max tokens per translation
+     * @return array Batch response with batch_id and request_counts
+     */
+    public function createBatchTranslation(array $translations, int $maxTokens = 4096): array
+    {
+        $requests = [];
+        $languageNames = $this->getLanguageNames();
+
+        foreach ($translations as $translation) {
+            $customId = $translation['id'];
+            $text = $translation['text'];
+            $from = $translation['from'] ?? 'cs';
+            $to = $translation['to'] ?? 'pl';
+
+            $fromLang = $languageNames[$from] ?? $from;
+            $toLang = $languageNames[$to] ?? $to;
+            $prompt = $this->buildTranslationPrompt($text, $fromLang, $toLang);
+
+            $requests[] = [
+                'custom_id' => $customId,
+                'params' => [
+                    'model' => $this->model,
+                    'max_tokens' => $maxTokens,
+                    'messages' => [
+                        [
+                            'role' => 'user',
+                            'content' => $prompt,
+                        ],
+                    ],
+                ],
+            ];
+        }
+
+        try {
+            $response = Http::withHeaders([
+                'x-api-key' => $this->apiKey,
+                'anthropic-version' => $this->apiVersion,
+                'content-type' => 'application/json',
+            ])
+            ->timeout(30)
+            ->post($this->batchApiUrl, [
+                'requests' => $requests,
+            ]);
+
+            if ($response->failed()) {
+                $errorData = $response->json();
+                $errorMessage = $errorData['error']['message'] ?? $response->body();
+                throw new \Exception('Claude Batch API error: ' . $errorMessage);
+            }
+
+            return $response->json();
+
+        } catch (ConnectionException $e) {
+            throw new \Exception('Chyba připojení k Claude Batch API: ' . $e->getMessage());
+        }
+    }
+
+    /**
+     * Získá status batche
+     *
+     * @param string $batchId
+     * @return array Batch status with processing_status and request_counts
+     */
+    public function getBatchStatus(string $batchId): array
+    {
+        try {
+            $response = Http::withHeaders([
+                'x-api-key' => $this->apiKey,
+                'anthropic-version' => $this->apiVersion,
+            ])
+            ->timeout(30)
+            ->get("{$this->batchApiUrl}/{$batchId}");
+
+            if ($response->failed()) {
+                $errorData = $response->json();
+                $errorMessage = $errorData['error']['message'] ?? $response->body();
+                throw new \Exception('Claude Batch API error: ' . $errorMessage);
+            }
+
+            return $response->json();
+
+        } catch (ConnectionException $e) {
+            throw new \Exception('Chyba připojení k Claude Batch API: ' . $e->getMessage());
+        }
+    }
+
+    /**
+     * Stáhne výsledky batche
+     *
+     * @param string $batchId
+     * @return array Results array with custom_id and result for each request
+     */
+    public function getBatchResults(string $batchId): array
+    {
+        try {
+            $response = Http::withHeaders([
+                'x-api-key' => $this->apiKey,
+                'anthropic-version' => $this->apiVersion,
+            ])
+            ->timeout(120)
+            ->get("{$this->batchApiUrl}/{$batchId}/results");
+
+            if ($response->failed()) {
+                $errorData = $response->json();
+                $errorMessage = $errorData['error']['message'] ?? $response->body();
+                throw new \Exception('Claude Batch API error: ' . $errorMessage);
+            }
+
+            // Results are in JSONL format - parse line by line
+            $body = $response->body();
+            $lines = explode("\n", trim($body));
+            $results = [];
+
+            foreach ($lines as $line) {
+                if (!empty($line)) {
+                    $results[] = json_decode($line, true);
+                }
+            }
+
+            return $results;
+
+        } catch (ConnectionException $e) {
+            throw new \Exception('Chyba připojení k Claude Batch API: ' . $e->getMessage());
+        }
+    }
+
+    /**
+     * Zruší běžící batch
+     *
+     * @param string $batchId
+     * @return array Cancellation response
+     */
+    public function cancelBatch(string $batchId): array
+    {
+        try {
+            $response = Http::withHeaders([
+                'x-api-key' => $this->apiKey,
+                'anthropic-version' => $this->apiVersion,
+            ])
+            ->timeout(30)
+            ->post("{$this->batchApiUrl}/{$batchId}/cancel");
+
+            if ($response->failed()) {
+                $errorData = $response->json();
+                $errorMessage = $errorData['error']['message'] ?? $response->body();
+                throw new \Exception('Claude Batch API error: ' . $errorMessage);
+            }
+
+            return $response->json();
+
+        } catch (ConnectionException $e) {
+            throw new \Exception('Chyba připojení k Claude Batch API: ' . $e->getMessage());
+        }
+    }
+
+    /**
+     * Vypíše všechny batche
+     *
+     * @param int $limit Počet batchů k načtení (max 100)
+     * @return array List of batches
+     */
+    public function listBatches(int $limit = 20): array
+    {
+        try {
+            $response = Http::withHeaders([
+                'x-api-key' => $this->apiKey,
+                'anthropic-version' => $this->apiVersion,
+            ])
+            ->timeout(30)
+            ->get($this->batchApiUrl, [
+                'limit' => min($limit, 100),
+            ]);
+
+            if ($response->failed()) {
+                $errorData = $response->json();
+                $errorMessage = $errorData['error']['message'] ?? $response->body();
+                throw new \Exception('Claude Batch API error: ' . $errorMessage);
+            }
+
+            return $response->json();
+
+        } catch (ConnectionException $e) {
+            throw new \Exception('Chyba připojení k Claude Batch API: ' . $e->getMessage());
+        }
     }
 }

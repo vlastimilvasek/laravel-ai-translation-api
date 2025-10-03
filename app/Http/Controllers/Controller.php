@@ -49,6 +49,11 @@ use Illuminate\Routing\Controller as BaseController;
  *     name="Claude",
  *     description="Claude AI komunikace"
  * )
+ *
+ * @OA\Tag(
+ *     name="Batch",
+ *     description="Batch API pro hromadné překlady se slevou 50%"
+ * )
  */
 class Controller extends BaseController
 {

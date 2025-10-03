@@ -11,13 +11,15 @@ Laravel 10 aplikace pro překlad HTML textů pomocí Claude AI a ChatGPT. Poskyt
 
 - 🤖 **Claude AI překlady** - Využívá model Claude Sonnet 4.5
 - 💬 **ChatGPT překlady** - Podporuje GPT-4o, GPT-4-turbo, GPT-3.5-turbo
-- 🖥️ **CLI rozhraní** - Artisan příkazy pro překlad ze souboru
+- 💰 **Batch API (50% sleva!)** - Hromadné překlady s poloviční cenou pro tisíce článků
+- 🖥️ **CLI rozhraní** - Artisan příkazy pro překlad ze souboru i batch processing
 - 🌐 **Web rozhraní** - Přátelský formulář v prohlížeči (vyžaduje přihlášení)
 - 🔌 **REST API** - JSON API pro externí integraci (token autentizace)
 - 🔐 **Autentizace** - Registrace, přihlášení + Social login (Google, Facebook)
 - 🎟️ **API Tokeny** - Sanctum token management pro API přístup
 - 🏗️ **Zachování HTML struktury** - Překládá pouze textový obsah
 - 🌍 **10 jazyků** - čeština, polština, angličtina, němčina, slovenština, francouzština, španělština, italština, ruština, ukrajinština
+- 📊 **Swagger/OpenAPI dokumentace** - Interaktivní API dokumentace
 
 ## 📋 Požadavky
 
@@ -200,6 +202,56 @@ php artisan chatgpt:translate --text="<p>Hello</p>" --to=cs --model=gpt-3.5-turb
 php artisan claude:check
 ```
 
+#### 💰 Batch překlady (50% sleva!)
+
+Pro hromadné překlady desítek tisíc článků použijte Batch API - **získáte 50% slevu** na všechny překlady!
+
+**Vytvoření CSV souboru:**
+```csv
+id,text,from,to
+article-1,"<p>První článek</p>",cs,pl
+article-2,"<p>Druhý článek</p>",cs,pl
+article-3,"<p>Třetí článek</p>",cs,en
+```
+
+**Spuštění batch jobu:**
+```bash
+# Claude Batch API (až 100,000 překladů najednou)
+php artisan batch:translate claude --create --input=translations.csv
+
+# ChatGPT Batch API (až 50,000 překladů najednou)
+php artisan batch:translate chatgpt --create --input=translations.csv
+```
+
+**Kontrola statusu:**
+```bash
+php artisan batch:translate claude --status=BATCH_ID
+php artisan batch:translate chatgpt --status=BATCH_ID
+```
+
+**Stažení výsledků:**
+```bash
+# Výsledky se uloží do batch-results-BATCH_ID.jsonl
+php artisan batch:translate claude --results=BATCH_ID
+php artisan batch:translate chatgpt --results=BATCH_ID
+```
+
+**Ostatní operace:**
+```bash
+# Seznam všech batchů
+php artisan batch:translate claude --list
+
+# Zrušení batch jobu
+php artisan batch:translate claude --cancel=BATCH_ID
+```
+
+**Výhody Batch API:**
+- ✅ **50% sleva** oproti standardnímu API
+- ✅ Zpracování do 24 hodin (většinou rychleji)
+- ✅ Až 100,000 požadavků najednou (Claude)
+- ✅ Až 50,000 požadavků najednou (ChatGPT)
+- ✅ Vyšší rate limity bez dopadu na standardní API
+
 ### REST API Endpointy
 
 #### POST `/api/v1/translate/claude`
@@ -260,6 +312,100 @@ Pošle obecnou zprávu do Claude AI.
 }
 ```
 
+### 💰 Batch API Endpointy (50% sleva)
+
+Pro hromadné překlady použijte Batch API endpointy - **50% sleva** na všechny požadavky!
+
+#### POST `/api/v1/batch/claude`
+
+Vytvoří batch job pro hromadné překlady pomocí Claude (až 100,000 překladů).
+
+**Request:**
+```json
+{
+  "translations": [
+    {
+      "id": "article-1",
+      "text": "<p>První článek</p>",
+      "from": "cs",
+      "to": "pl"
+    },
+    {
+      "id": "article-2",
+      "text": "<p>Druhý článek</p>",
+      "from": "cs",
+      "to": "en"
+    }
+  ]
+}
+```
+
+**Response:**
+```json
+{
+  "id": "msgbatch_01ABC123...",
+  "processing_status": "in_progress",
+  "request_counts": {
+    "processing": 2,
+    "succeeded": 0,
+    "errored": 0
+  }
+}
+```
+
+#### POST `/api/v1/batch/chatgpt`
+
+Vytvoří batch job pro hromadné překlady pomocí ChatGPT (až 50,000 překladů).
+
+**Request:** Stejný formát jako Claude batch
+**Response:** Obsahuje `id`, `status`, `input_file_id`
+
+#### GET `/api/v1/batch/{provider}/{batchId}/status`
+
+Zkontroluje status batch jobu (provider: `claude` nebo `chatgpt`).
+
+**Response:**
+```json
+{
+  "id": "msgbatch_01ABC123...",
+  "processing_status": "ended",
+  "request_counts": {
+    "processing": 0,
+    "succeeded": 2,
+    "errored": 0
+  }
+}
+```
+
+#### GET `/api/v1/batch/{provider}/{batchId}/results`
+
+Stáhne výsledky dokončeného batch jobu.
+
+**Response:**
+```json
+{
+  "results": [
+    {
+      "custom_id": "article-1",
+      "result": {
+        "type": "succeeded",
+        "message": {
+          "content": [{"text": "<p>Pierwszy artykuł</p>"}]
+        }
+      }
+    }
+  ]
+}
+```
+
+#### POST `/api/v1/batch/{provider}/{batchId}/cancel`
+
+Zruší běžící batch job.
+
+#### GET `/api/v1/batch/{provider}?limit=20`
+
+Vypíše všechny batch joby.
+
 ### Příklady s CURL
 
 **Překlad pomocí Claude:**
@@ -284,6 +430,31 @@ curl -X POST http://localhost:8000/api/v1/translate/chatgpt \
     "from": "en",
     "to": "cs"
   }'
+```
+
+**Batch překlad (50% sleva):**
+```bash
+curl -X POST http://localhost:8000/api/v1/batch/claude \
+  -H "Authorization: Bearer VÁŠ_API_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "translations": [
+      {
+        "id": "article-1",
+        "text": "<p>Text k překladu</p>",
+        "from": "cs",
+        "to": "pl"
+      }
+    ]
+  }'
+
+# Kontrola statusu
+curl http://localhost:8000/api/v1/batch/claude/BATCH_ID/status \
+  -H "Authorization: Bearer VÁŠ_API_TOKEN"
+
+# Stažení výsledků
+curl http://localhost:8000/api/v1/batch/claude/BATCH_ID/results \
+  -H "Authorization: Bearer VÁŠ_API_TOKEN"
 ```
 
 ## 🌍 Podporované jazyky
