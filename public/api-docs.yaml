@@ -1,0 +1,262 @@
+openapi: 3.0.0
+info:
+  title: Laravel AI Translation API
+  description: |
+    REST API pro překlad HTML textů pomocí Claude AI a ChatGPT.
+
+    **Podporované jazyky:** cs, pl, en, de, sk, fr, es, it, ru, uk
+
+    **Autentizace:** Všechny endpointy vyžadují Bearer token.
+    Token získáte v dashboardu po přihlášení.
+  version: 1.0.0
+  contact:
+    email: support@example.com
+  license:
+    name: MIT
+    url: https://opensource.org/licenses/MIT
+
+servers:
+  - url: http://localhost:8000
+    description: Local Development Server
+  - url: https://api.example.com
+    description: Production Server
+
+security:
+  - bearerAuth: []
+
+tags:
+  - name: Translation
+    description: API Endpointy pro překlad textů
+  - name: Claude
+    description: Claude AI komunikace
+
+paths:
+  /api/v1/translate/claude:
+    post:
+      tags:
+        - Translation
+      summary: Překlad HTML textu pomocí Claude AI
+      description: |
+        Překládá HTML text mezi jazyky pomocí Claude Sonnet 4.5.
+
+        **Vlastnosti:**
+        - Zachovává HTML strukturu a tagy
+        - Nepřekládá názvy alb v <em> tazích
+        - Nepřekládá vlastní jména a značky
+        - Max 50000 znaků
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - text
+              properties:
+                text:
+                  type: string
+                  maxLength: 50000
+                  description: HTML text k překladu
+                  example: "<p>Dobrý den, jak se máte?</p>"
+                from:
+                  type: string
+                  minLength: 2
+                  maxLength: 2
+                  description: "Zdrojový jazyk (2 znaky ISO kód, výchozí: cs)"
+                  example: "cs"
+                  default: "cs"
+                to:
+                  type: string
+                  minLength: 2
+                  maxLength: 2
+                  description: "Cílový jazyk (2 znaky ISO kód, výchozí: pl)"
+                  example: "pl"
+                  default: "pl"
+      responses:
+        '200':
+          description: Úspěšný překlad
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  translated:
+                    type: string
+                    example: "<p>Dzień dobry, jak się masz?</p>"
+        '401':
+          description: Neautorizovaný přístup - chybí nebo neplatný Bearer token
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message:
+                    type: string
+                    example: "Unauthenticated."
+        '422':
+          description: Validační chyba
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message:
+                    type: string
+                    example: "Validační chyba"
+                  errors:
+                    type: object
+                    additionalProperties:
+                      type: array
+                      items:
+                        type: string
+        '500':
+          description: Chyba serveru nebo Claude API
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message:
+                    type: string
+                    example: "Chyba při překladu: API error"
+
+  /api/v1/translate/chatgpt:
+    post:
+      tags:
+        - Translation
+      summary: Překlad HTML textu pomocí ChatGPT
+      description: Překládá HTML text mezi jazyky pomocí GPT-4o. Zachovává HTML strukturu.
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - text
+              properties:
+                text:
+                  type: string
+                  maxLength: 50000
+                  example: "<p>Hello world</p>"
+                from:
+                  type: string
+                  example: "en"
+                  default: "cs"
+                to:
+                  type: string
+                  example: "cs"
+                  default: "pl"
+      responses:
+        '200':
+          description: Úspěšný překlad
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  translated:
+                    type: string
+                    example: "<p>Ahoj světe</p>"
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '422':
+          $ref: '#/components/responses/ValidationError'
+        '500':
+          $ref: '#/components/responses/ServerError'
+
+  /api/v1/ask/claude:
+    post:
+      tags:
+        - Claude
+      summary: Obecná komunikace s Claude AI
+      description: Pošle obecnou zprávu do Claude AI a vrátí odpověď
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - message
+              properties:
+                message:
+                  type: string
+                  maxLength: 50000
+                  description: Zpráva pro Claude AI
+                  example: "Jaké je hlavní město Polska?"
+      responses:
+        '200':
+          description: Úspěšná odpověď
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  response:
+                    type: string
+                    example: "Hlavním městem Polska je Varšava."
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '422':
+          $ref: '#/components/responses/ValidationError'
+        '500':
+          $ref: '#/components/responses/ServerError'
+
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+      description: |
+        Laravel Sanctum Bearer Token
+
+        **Jak získat token:**
+        1. Přihlaste se do aplikace (/login)
+        2. Jděte na Dashboard (/dashboard)
+        3. Vytvořte nový API token
+        4. Zkopírujte token (uvidíte ho pouze jednou!)
+        5. Použijte token v hlavičce: `Authorization: Bearer VÁŠ_TOKEN`
+
+  responses:
+    Unauthorized:
+      description: Neautorizovaný přístup
+      content:
+        application/json:
+          schema:
+            type: object
+            properties:
+              message:
+                type: string
+                example: "Unauthenticated."
+
+    ValidationError:
+      description: Validační chyba
+      content:
+        application/json:
+          schema:
+            type: object
+            properties:
+              message:
+                type: string
+                example: "Validační chyba"
+              errors:
+                type: object
+
+    ServerError:
+      description: Chyba serveru
+      content:
+        application/json:
+          schema:
+            type: object
+            properties:
+              message:
+                type: string
+                example: "Chyba při komunikaci s AI API"

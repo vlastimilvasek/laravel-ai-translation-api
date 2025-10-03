@@ -58,6 +58,11 @@
                             <i class="bi bi-house-door me-1"></i>Domů
                         </a>
                     </li>
+                    <li class="nav-item">
+                        <a class="nav-link {{ request()->routeIs('api.documentation') ? 'active' : '' }}" href="{{ route('api.documentation') }}">
+                            <i class="bi bi-book me-1"></i>API Docs
+                        </a>
+                    </li>
                     @auth
                         <li class="nav-item">
                             <a class="nav-link {{ request()->routeIs('translate.form') ? 'active' : '' }}" href="{{ route('translate.form') }}">

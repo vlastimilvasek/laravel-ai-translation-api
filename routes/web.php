@@ -12,6 +12,11 @@ Route::get('/', function () {
     return view('welcome');
 })->name('home');
 
+// API Documentation (Swagger UI)
+Route::get('/api/documentation', function () {
+    return view('swagger.index');
+})->name('api.documentation');
+
 // Authentication routes
 Route::middleware('guest')->group(function () {
     Route::get('/login', [LoginController::class, 'showLoginForm'])->name('login');

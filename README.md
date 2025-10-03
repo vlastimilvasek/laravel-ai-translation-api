@@ -142,6 +142,22 @@ curl -X POST http://localhost:8000/api/v1/translate/claude \
 - REST API (`/api/v1/*`) vyžaduje Bearer token v hlavičce
 - Tokeny lze kdykoliv odvolat na dashboardu
 
+## 📚 API Dokumentace (Swagger/OpenAPI)
+
+Interaktivní API dokumentace je dostupná na:
+
+**Swagger UI:** `http://localhost:8000/api/documentation`
+
+Dokumentace obsahuje:
+- ✅ Všechny API endpointy s detailním popisem
+- ✅ Request/Response schémata s příklady
+- ✅ Možnost vyzkoušet API přímo v prohlížeči ("Try it out")
+- ✅ Informace o autentizaci (Bearer token)
+- ✅ Podporované jazyky a formáty
+- ✅ Error response schémata
+
+**OpenAPI specifikace:** Dostupná v souboru `public/api-docs.yaml`
+
 ## 📖 Použití
 
 ### CLI Příkazy (Artisan Commands)
