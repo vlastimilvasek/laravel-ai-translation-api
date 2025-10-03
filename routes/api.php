@@ -15,12 +15,15 @@ use App\Http\Controllers\TranslationController;
 |
 */
 
-Route::middleware('auth:sanctum')->get('/user', function (Request $request) {
-    return $request->user();
-});
+// Protected API routes - require Bearer token
+Route::middleware('auth:sanctum')->group(function () {
+    Route::get('/user', function (Request $request) {
+        return $request->user();
+    });
 
-Route::prefix('v1')->group(function () {
-    Route::post('/translate/claude', [TranslationController::class, 'translateWithClaude']);
-    Route::post('/translate/chatgpt', [TranslationController::class, 'translateWithChatGpt']);
-    Route::post('/ask/claude', [TranslationController::class, 'askClaude']);
+    Route::prefix('v1')->group(function () {
+        Route::post('/translate/claude', [TranslationController::class, 'translateWithClaude']);
+        Route::post('/translate/chatgpt', [TranslationController::class, 'translateWithChatGpt']);
+        Route::post('/ask/claude', [TranslationController::class, 'askClaude']);
+    });
 });

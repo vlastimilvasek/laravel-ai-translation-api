@@ -58,11 +58,44 @@
                             <i class="bi bi-house-door me-1"></i>Domů
                         </a>
                     </li>
-                    <li class="nav-item">
-                        <a class="nav-link {{ request()->routeIs('translate.form') ? 'active' : '' }}" href="{{ route('translate.form') }}">
-                            <i class="bi bi-translate me-1"></i>Překlad
-                        </a>
-                    </li>
+                    @auth
+                        <li class="nav-item">
+                            <a class="nav-link {{ request()->routeIs('translate.form') ? 'active' : '' }}" href="{{ route('translate.form') }}">
+                                <i class="bi bi-translate me-1"></i>Překlad
+                            </a>
+                        </li>
+                        <li class="nav-item">
+                            <a class="nav-link {{ request()->routeIs('dashboard') ? 'active' : '' }}" href="{{ route('dashboard') }}">
+                                <i class="bi bi-speedometer2 me-1"></i>Dashboard
+                            </a>
+                        </li>
+                        <li class="nav-item dropdown">
+                            <a class="nav-link dropdown-toggle" href="#" role="button" data-bs-toggle="dropdown">
+                                <i class="bi bi-person-circle me-1"></i>{{ Auth::user()->name }}
+                            </a>
+                            <ul class="dropdown-menu dropdown-menu-end">
+                                <li>
+                                    <form method="POST" action="{{ route('logout') }}">
+                                        @csrf
+                                        <button type="submit" class="dropdown-item">
+                                            <i class="bi bi-box-arrow-right me-2"></i>Odhlásit se
+                                        </button>
+                                    </form>
+                                </li>
+                            </ul>
+                        </li>
+                    @else
+                        <li class="nav-item">
+                            <a class="nav-link" href="{{ route('login') }}">
+                                <i class="bi bi-box-arrow-in-right me-1"></i>Přihlásit se
+                            </a>
+                        </li>
+                        <li class="nav-item">
+                            <a class="nav-link" href="{{ route('register') }}">
+                                <i class="bi bi-person-plus me-1"></i>Registrace
+                            </a>
+                        </li>
+                    @endauth
                 </ul>
             </div>
         </div>

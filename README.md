@@ -12,8 +12,10 @@ Laravel 10 aplikace pro překlad HTML textů pomocí Claude AI a ChatGPT. Poskyt
 - 🤖 **Claude AI překlady** - Využívá model Claude Sonnet 4.5
 - 💬 **ChatGPT překlady** - Podporuje GPT-4o, GPT-4-turbo, GPT-3.5-turbo
 - 🖥️ **CLI rozhraní** - Artisan příkazy pro překlad ze souboru
-- 🌐 **Web rozhraní** - Přátelský formulář v prohlížeči
-- 🔌 **REST API** - JSON API pro externí integraci
+- 🌐 **Web rozhraní** - Přátelský formulář v prohlížeči (vyžaduje přihlášení)
+- 🔌 **REST API** - JSON API pro externí integraci (token autentizace)
+- 🔐 **Autentizace** - Registrace, přihlášení + Social login (Google, Facebook)
+- 🎟️ **API Tokeny** - Sanctum token management pro API přístup
 - 🏗️ **Zachování HTML struktury** - Překládá pouze textový obsah
 - 🌍 **10 jazyků** - čeština, polština, angličtina, němčina, slovenština, francouzština, španělština, italština, ruština, ukrajinština
 
@@ -22,8 +24,10 @@ Laravel 10 aplikace pro překlad HTML textů pomocí Claude AI a ChatGPT. Poskyt
 - PHP 8.1 nebo vyšší
 - Composer
 - Laravel 10
+- MySQL/PostgreSQL/SQLite databáze
 - API klíč pro Anthropic Claude
 - API klíč pro OpenAI (volitelně)
+- Google/Facebook OAuth credentials (pro social login)
 
 ## 🚀 Instalace
 
@@ -48,18 +52,95 @@ cp .env.example .env
 php artisan key:generate
 ```
 
-5. **Nastav API klíče v .env:**
+5. **Nastav databázi a API klíče v .env:**
 ```env
+DB_CONNECTION=mysql
+DB_HOST=127.0.0.1
+DB_PORT=3306
+DB_DATABASE=laravel
+DB_USERNAME=root
+DB_PASSWORD=
+
 ANTHROPIC_API_KEY=sk-ant-...
 OPENAI_API_KEY=sk-...
 ```
 
-6. **Spusť aplikaci:**
+6. **Nastav Social Login (volitelně):**
+```env
+GOOGLE_CLIENT_ID=your-google-client-id
+GOOGLE_CLIENT_SECRET=your-google-client-secret
+GOOGLE_REDIRECT_URL=http://localhost:8000/auth/google/callback
+
+FACEBOOK_CLIENT_ID=your-facebook-app-id
+FACEBOOK_CLIENT_SECRET=your-facebook-app-secret
+FACEBOOK_REDIRECT_URL=http://localhost:8000/auth/facebook/callback
+```
+
+**Získání OAuth credentials:**
+- **Google**: [Google Cloud Console](https://console.cloud.google.com/) → APIs & Services → Credentials
+- **Facebook**: [Facebook Developers](https://developers.facebook.com/) → My Apps → Create App
+
+7. **Spusť migrace:**
+```bash
+php artisan migrate
+```
+
+8. **Spusť aplikaci:**
 ```bash
 php artisan serve
 ```
 
 Aplikace poběží na `http://localhost:8000`
+
+## 🔐 Autentizace
+
+Projekt obsahuje kompletní autentizační systém:
+
+### Registrace a přihlášení
+
+1. **Klasická registrace** - `/register`
+   - Jméno, email, heslo
+   - Automatické přihlášení po registraci
+
+2. **Přihlášení** - `/login`
+   - Email a heslo
+   - Remember me funkce
+
+3. **Social Login**
+   - Google OAuth
+   - Facebook OAuth
+   - Automatické vytvoření účtu při prvním přihlášení
+
+### Dashboard (`/dashboard`)
+
+Po přihlášení získáte přístup k dashboardu, kde můžete:
+- Zobrazit informace o svém účtu
+- **Vytvářet API tokeny** pro přístup k API
+- Spravovat aktivní tokeny
+- Vidět statistiky použití
+
+### API Autentizace (Sanctum Tokens)
+
+**Všechny API endpointy (`/api/v1/*`) vyžadují Bearer token autentizaci!**
+
+1. Přihlas se do aplikace (`/login`)
+2. Jdi na Dashboard (`/dashboard`)
+3. Vytvoř nový API token
+4. Zkopíruj token (uvidíš ho pouze jednou!)
+5. Použij token v API requestech:
+
+```bash
+curl -X POST http://localhost:8000/api/v1/translate/claude \
+  -H "Authorization: Bearer VÁŠ_API_TOKEN" \
+  -H "Content-Type: application/json" \
+  -H "Accept: application/json" \
+  -d '{"text": "<p>Text k překladu</p>", "from": "cs", "to": "pl"}'
+```
+
+⚠️ **Důležité:**
+- Web rozhraní (`/preklad`) vyžaduje klasické přihlášení (session)
+- REST API (`/api/v1/*`) vyžaduje Bearer token v hlavičce
+- Tokeny lze kdykoliv odvolat na dashboardu
 
 ## 📖 Použití
 
