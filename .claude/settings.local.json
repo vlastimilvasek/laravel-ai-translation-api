@@ -5,7 +5,9 @@
       "Bash(php artisan breeze:install:*)",
       "Bash(php artisan config:clear:*)",
       "Bash(php artisan:*)",
-      "Bash(rm:*)"
+      "Bash(rm:*)",
+      "Bash(git commit -m \"$(cat <<''EOF''\nAdd comprehensive authentication system with Social Login\n\nAuthentication Features:\n- User registration and login system\n- Laravel Socialite integration (Google + Facebook OAuth)\n- Session-based auth for web routes (/preklad)\n- Sanctum token-based auth for API routes (/api/v1/*)\n- Dashboard with API token management\n- User profile with account information\n\nSecurity:\n- All web routes (/preklad) now require authentication\n- All API routes (/api/v1/*) require Bearer token\n- Password hashing with bcrypt\n- CSRF protection for web forms\n- Remember me functionality\n\nDatabase Changes:\n- Added migration for social login fields (provider, provider_id, provider_token, avatar)\n- User model updated for social auth support\n\nUI Components:\n- Login page with social login buttons\n- Registration page\n- Dashboard with API token CRUD\n- Updated navigation with auth status\n- Responsive Bootstrap 5 design\n\nConfiguration:\n- Added OAuth credentials to .env.example\n- Configured services.php for Google/Facebook providers\n- Updated routes with auth middleware\n\nDocumentation:\n- Comprehensive README update with auth setup\n- OAuth credentials acquisition guide\n- API token usage examples\n- Security best practices\n\n🤖 Generated with [Claude Code](https://claude.com/claude-code)\n\nCo-Authored-By: Claude <noreply@anthropic.com>\nEOF\n)\")",
+      "Bash(git push:*)"
     ],
     "deny": [],
     "ask": []
